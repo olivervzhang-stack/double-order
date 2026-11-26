@@ -5,18 +5,35 @@ Posts matches to Slack so the shipping team can combine them.
 """
 
 import os
-import sys
 import requests
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 
 SHOPIFY_STORE = os.environ["SHOPIFY_STORE"]
-SHOPIFY_TOKEN = os.environ["SHOPIFY_TOKEN"]
+SHOPIFY_CLIENT_ID = os.environ["SHOPIFY_CLIENT_ID"]
+SHOPIFY_CLIENT_SECRET = os.environ["SHOPIFY_CLIENT_SECRET"]
 SLACK_WEBHOOK = os.environ["SLACK_WEBHOOK"]
 CHECK_WINDOW_MINUTES = int(os.environ.get("CHECK_WINDOW_MINUTES", "65"))
 
 
-def get_orders(created_after):
+def get_access_token():
+    """Exchange client credentials for a short-lived access token."""
+    resp = requests.post(
+        f"https://{SHOPIFY_STORE}/admin/oauth/access_token",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        data={
+            "grant_type": "client_credentials",
+            "client_id": SHOPIFY_CLIENT_ID,
+            "client_secret": SHOPIFY_CLIENT_SECRET,
+        },
+    )
+    resp.raise_for_status()
+    token = resp.json()["access_token"]
+    print("Access token acquired.")
+    return token
+
+
+def get_orders(token, created_after):
     orders = []
     url = f"https://{SHOPIFY_STORE}/admin/api/2024-10/orders.json"
     params = {
@@ -29,7 +46,7 @@ def get_orders(created_after):
     while url:
         resp = requests.get(
             url,
-            headers={"X-Shopify-Access-Token": SHOPIFY_TOKEN},
+            headers={"X-Shopify-Access-Token": token},
             params=params,
         )
         resp.raise_for_status()
@@ -82,15 +99,15 @@ def format_order_line(order):
 
 
 def main():
+    token = get_access_token()
+
     now = datetime.now(timezone.utc)
     check_since = now - timedelta(minutes=CHECK_WINDOW_MINUTES)
     seven_days_ago = now - timedelta(days=7)
 
-    # Pull all open orders from the last 7 days
-    all_orders = get_orders(seven_days_ago)
+    all_orders = get_orders(token, seven_days_ago)
     print(f"Found {len(all_orders)} open orders in the last 7 days.")
 
-    # Identify which ones are new (within the check window)
     new_orders = [
         o
         for o in all_orders
@@ -103,14 +120,12 @@ def main():
 
     print(f"{len(new_orders)} new order(s) to check.")
 
-    # Group every order by normalized name + address + zip
     groups = defaultdict(list)
     for order in all_orders:
         key = get_address_key(order)
         if key:
             groups[key].append(order)
 
-    # Notify on groups that have 2+ orders AND at least one is new
     notified = 0
     for key, orders in groups.items():
         if len(orders) < 2:
