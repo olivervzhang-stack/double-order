@@ -2,8 +2,8 @@ name: Check Duplicate Orders
 
 on:
   schedule:
-    - cron: '0 * * * *'  # Every hour on the hour
-  workflow_dispatch: {}   # Manual trigger for testing
+    - cron: '0 * * * *'
+  workflow_dispatch: {}
 
 jobs:
   check:
@@ -20,5 +20,6 @@ jobs:
       - run: python check_duplicates.py
         env:
           SHOPIFY_STORE: ${{ secrets.SHOPIFY_STORE }}
-          SHOPIFY_TOKEN: ${{ secrets.SHOPIFY_TOKEN }}
+          SHOPIFY_CLIENT_ID: ${{ secrets.SHOPIFY_CLIENT_ID }}
+          SHOPIFY_CLIENT_SECRET: ${{ secrets.SHOPIFY_CLIENT_SECRET }}
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
