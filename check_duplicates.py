@@ -27,7 +27,10 @@ def get_access_token():
             "client_secret": SHOPIFY_CLIENT_SECRET,
         },
     )
-    resp.raise_for_status()
+    if resp.status_code != 200:
+        print(f"Token request failed: {resp.status_code}")
+        print(f"Response: {resp.text}")
+        resp.raise_for_status()
     token = resp.json()["access_token"]
     print("Access token acquired.")
     return token
